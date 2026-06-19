@@ -1,81 +1,211 @@
-# 情緒陪伴機器人 — 臉部播放器（Raspberry Pi 4）
+# 情緒陪伴機器人 — 臉部播放器
 
-預烤分層 sprite ＋ pygame 即時合成。會說話的 5 種情緒（開心/難過/沮喪/生氣/說話中）
-的嘴型由**實際 TTS 音量驅動**（lip-sync），並有眨眼、視線游移、挑眉/壓眉等微動作；
-不說話的 6 種狀態（開機/待機/聆聽/思考/休眠/異常）直接播放預先做好的 APNG。
-畫面 800×480，對應你的小螢幕。
+本專案是情緒陪伴機器人的**臉部顯示系統**，部署於搭載 800×480 螢幕的 Raspberry Pi 4。  
+採用預烤分層 sprite 搭配 pygame 即時合成，讓 5 種說話情緒（開心／難過／沮喪／生氣／說話中）的嘴型能跟隨 **TTS 實際音量即時對嘴**（lip-sync），並附有眨眼、視線游移、挑眉／壓眉等微動作。  
+6 種非說話狀態（開機／待機／聆聽／思考／休眠／異常）則播放預先做好的 APNG 迴圈。  
+臉部透過 **TCP 指令介面**接受外部 STT/LLM/TTS pipeline 驅動。
 
-## 內容物
+---
+
+## 1. 專案架構
 
 ```
-face_player.py        主程式（狀態機、lip-sync、微動作、TCP 指令介面）
-run_face.sh           啟動腳本（環境變數設定）
-face.service          systemd 使用者服務（開機自啟）
-requirements.txt      Python 相依
-assets/sprites/       5 種情緒的分層圖（screen / brows / eyes / mouth_0..7）
-assets/apng/          6 種非說話狀態的 APNG（迴圈播放）
-tools/render_layers.py  重新烘焙分層 sprite（改造型/顏色時用）
-tools/render_apng.py    重新產生 APNG
-integration/face_client.py     從你的 pipeline 驅動臉部（含情緒映射、wav 轉檔）
-integration/example_pipeline.py 可直接跑的端到端骨架（含 mock，標好替換點）
+hearu-face-player/
+│
+├── face_player.py                  # 核心運行時：狀態機、lip-sync、微動作、TCP 指令介面
+├── run_face.sh                     # Pi 用啟動腳本（設定環境變數）
+├── face.service                    # systemd 使用者服務（Pi 開機自啟）
+├── requirements.txt                # Python 相依套件
+│
+├── assets/
+│   ├── sprites/                    # 5 種說話情緒的分層 PNG
+│   │   ├── screen_<emotion>.png    # 背景＋環境光＋臉頰＋符號（不透明底層）
+│   │   ├── brows_<emotion>.png     # 眉毛層
+│   │   ├── eyes_open_<emotion>.png # 睜眼層
+│   │   ├── eyes_closed_<emotion>.png
+│   │   └── mouth_<emotion>_0..7.png  # 嘴型 8 格（0=閉合，7=最開）
+│   └── apng/                       # 6 種非說話狀態的 APNG 迴圈
+│       └── <state>.png             # boot / idle / listening / thinking / sleep / error
+│
+├── tools/
+│   ├── render_layers.py            # 重新烘焙 assets/sprites/（改外觀／顏色時用）
+│   └── render_apng.py              # 重新產生 assets/apng/
+│
+└── integration/
+    ├── face_client.py              # 從外部 pipeline 驅動臉部（TCP 封裝＋情緒映射）
+    ├── example_pipeline.py         # 端到端骨架，含 mock 實作，標好 4 個待替換點
+    └── mac_say_test.py             # macOS 本機 lip-sync 測試工具（CLI 與互動 REPL）
 ```
 
-## 1. 硬體與系統
+---
 
-- Raspberry Pi 4（2GB 以上即可；本程式佔用僅數十 MB，比 Chromium 省很多）。
-- 800×480 螢幕（DSI/HDMI 觸控皆可）＋喇叭。
-- Raspberry Pi OS Bookworm 64-bit（桌面版，需要圖形工作階段來顯示）。
+## 2. 部署
 
-## 2. 安裝
+### 2-1. macOS 本機開發測試（推薦先跑這個）
+
+不需要 Pi，行為與 Pi 完全相同，方便快速驗證表情與對嘴效果。
+
+#### 2-1-1. 安裝
+
+```bash
+# 建立 conda 環境（或用任何 Python 3.11 虛擬環境）
+conda create -n py311_uihearu python=3.11 -y
+conda activate py311_uihearu
+
+# 安裝相依
+pip install -r requirements.txt
+
+# 複製專案
+git clone https://github.com/newsiquare/hearu-face-player
+cd hearu-face-player
+```
+
+#### 2-1-2. 啟動臉部（終端機 1）
+
+```bash
+FACE_WINDOWED=1 FACE_DEBUG=1 python3 face_player.py
+```
+
+視窗開啟後，左上角會顯示目前狀態標籤。  
+**鍵盤快捷鍵**（視窗需有焦點）：
+
+| 按鍵 | 動作 |
+|------|------|
+| `1` | 開心說話 |
+| `2` | 難過說話 |
+| `3` | 沮喪說話 |
+| `4` | 生氣說話 |
+| `5` | 說話中（中性） |
+| `b` / `i` / `l` / `t` / `k` / `x` | 開機／待機／聆聽／思考／休眠／異常 |
+| `Esc` / `q` | 離開 |
+
+#### 2-1-3. 用 macOS TTS 測試 lip-sync（終端機 2）
+
+> 前提：系統已安裝中文語音（系統設定 → 輔助使用 → 朗讀內容 → 管理聲音，下載「中文（台灣）」）
+
+```bash
+cd integration
+
+# 一次性：指定情緒說一句話
+python mac_say_test.py "我很開心見到你！" -e happy
+python mac_say_test.py "你今天過得好嗎" -e sad
+python mac_say_test.py "這樣不公平！" -e angry
+
+# 換中文語音（選填，預設系統語音）
+python mac_say_test.py "早安！" -e happy -v Meijia
+
+# 只切換臉部狀態（不說話）
+python mac_say_test.py --state thinking
+python mac_say_test.py --state listening
+
+# 互動 REPL（邊調邊試，最方便）
+python mac_say_test.py
+```
+
+互動模式可用的指令：
+
+```
+直接打字          → 用目前情緒說話
+:happy / :sad / :dejected / :angry / :speaking  → 換情緒
+:voice Meijia     → 換語音
+:rate 160         → 換語速（WPM）
+:state thinking   → 只切狀態
+:voices           → 列出所有可用語音
+:quit             → 離開
+```
+
+---
+
+### 2-2. Raspberry Pi 4 正式部署
+
+#### 2-2-1. 硬體需求
+
+- Raspberry Pi 4（RAM 2 GB 以上）
+- 800×480 螢幕（DSI 排線或 HDMI 均可）
+- 喇叭或耳機（3.5mm / USB / HDMI 音訊皆可）
+- Raspberry Pi OS **Bookworm 64-bit 桌面版**（需要圖形工作階段）
+
+#### 2-2-2. 安裝相依套件
 
 ```bash
 sudo apt update
 sudo apt install -y python3-pygame python3-pil python3-numpy fonts-noto-cjk
-# 想用內建語音做示範可裝（非必要，實機用你自己的 TTS）：
-sudo apt install -y espeak-ng
-# 把整個資料夾放到 ~/companion-face
+
+# 複製專案
+git clone https://github.com/newsiquare/hearu-face-player ~/hearu-face-player
+cd ~/hearu-face-player
 ```
-若偏好 pip：`pip install -r requirements.txt --break-system-packages`
 
-## 3. 音訊輸出
+若偏好 pip 管理：`pip install -r requirements.txt --break-system-packages`
 
-`pygame.mixer` 走系統預設音訊裝置。用 `raspi-config` →
-System Options → Audio 選對輸出（3.5mm / HDMI / USB / I2S 擴大板），
-或在 `~/.asoundrc` 設預設 sink。先 `aplay 某檔.wav` 確認有聲音再跑本程式。
-
-## 4. 先在視窗測試
+#### 2-2-3. 確認音訊輸出
 
 ```bash
-cd ~/companion-face
+# 先確認 aplay 有聲音，再跑本程式
+aplay /usr/share/sounds/alsa/Front_Center.wav
+```
+
+若無聲音，用 `raspi-config` → System Options → Audio 選對輸出裝置（3.5mm / HDMI / USB），
+或在 `~/.asoundrc` 指定預設 sink。
+
+#### 2-2-4. 先以視窗模式測試
+
+```bash
+cd ~/hearu-face-player
 FACE_WINDOWED=1 FACE_DEBUG=1 python3 face_player.py
 ```
-鍵盤：`1`開心 `2`難過 `3`沮喪 `4`生氣 `5`說話中（會用示範語音對嘴）；
-`b`開機 `i`待機 `l`聆聽 `t`思考 `k`休眠 `x`異常；`Esc/q` 離開。
 
-## 5. 開機自啟
+確認表情、音訊、鍵盤快捷鍵都正常後，再進行下一步。
 
-**方法 A — 合成器 autostart（最簡單）。** Bookworm 預設 Wayland：
-- labwc：編輯 `~/.config/labwc/autostart`，加入
-  `bash /home/<USER>/companion-face/run_face.sh &`
-- 舊版 wayfire：在 `~/.config/wayfire.ini` 的 `[autostart]` 區段加一行。
-搭配 `raspi-config` 設定**桌面自動登入**。
+#### 2-2-5. 設定開機自啟（擇一）
 
-**方法 B — systemd 使用者服務（較好管理、會自動重啟）。**
+**方法 A — 合成器 autostart（最快）**
+
+Bookworm 預設 Wayland（labwc）：
+
 ```bash
-loginctl enable-linger <USER>
-mkdir -p ~/.config/systemd/user
-cp face.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now face.service
-journalctl --user -u face.service -f   # 看日誌
+# 設定桌面自動登入
+sudo raspi-config   # → System Options → Boot / Auto Login → Desktop Autologin
+
+# 加入 autostart
+mkdir -p ~/.config/labwc
+echo "bash /home/$USER/hearu-face-player/run_face.sh &" >> ~/.config/labwc/autostart
 ```
 
-> 若畫面全黑或位置跑掉：Wayland/SDL 偶有相容問題。先在 `run_face.sh`
-> 試 `export SDL_VIDEODRIVER=x11`，或用 `raspi-config` → Advanced →
-> Wayland 切回 X11（很多 kiosk 在 X11 下更穩）。關螢幕休眠：`xset s off -dpms`（X11）
-> 或在合成器設定關閉 DPMS。
+若使用舊版 wayfire，改編輯 `~/.config/wayfire.ini` 的 `[autostart]` 區段。
 
-## 6. 與你的 STT/LLM/TTS pipeline 整合
+**方法 B — systemd 使用者服務（建議，可自動重啟）**
+
+```bash
+loginctl enable-linger $USER
+mkdir -p ~/.config/systemd/user
+cp ~/hearu-face-player/face.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now face.service
+
+# 查看即時日誌
+journalctl --user -u face.service -f
+```
+
+#### 2-2-6. 其他 Pi 設定
+
+```bash
+# 隱藏滑鼠游標（需安裝 unclutter）
+sudo apt install -y unclutter
+echo "unclutter -idle 0 &" >> ~/.config/labwc/autostart
+
+# 關閉螢幕休眠（X11 環境）
+echo "xset s off -dpms" >> ~/.xinitrc
+
+# 若畫面全黑或顯示位置跑掉（Wayland/SDL 相容問題）
+# 在 run_face.sh 加入：
+export SDL_VIDEODRIVER=x11
+# 或用 raspi-config → Advanced → Wayland 切回 X11
+```
+
+---
+
+## 3. 與 STT/LLM/TTS Pipeline 整合
 
 程式啟動會在 `127.0.0.1:8765` 開一個 TCP 指令介面（傳一行 JSON 即可）：
 
@@ -95,27 +225,42 @@ face({"cmd": "stop"})                                    # 中斷
 `speak` 的 `wav` 給你 TTS 輸出的 wav 檔（16-bit PCM 最佳）；程式會即時算它的音量
 包絡來開合嘴。`emotion` 從你的情緒判斷結果帶入（happy/sad/dejected/angry/speaking）。
 
-典型流程對照：
-`待機 → vad 觸發 state:listening → 辨識完 state:thinking → TTS 開始 speak(emotion,wav) → 講完自動 idle`。
-（也可改成 `import face_player`、直接呼叫 `Face` 物件的方法，省去 TCP。）
+典型流程：  
+`待機 → VAD 觸發 state:listening → 辨識完 state:thinking → TTS 開始 speak(emotion,wav) → 講完自動回 idle`
 
-## 7. 改造型 / 顏色
+也可改成 `import face_player`、直接呼叫 `Face` 物件的方法，省去 TCP。
 
-所有發光、顏色、嘴型形狀都在 `tools/render_layers.py` 的 `EMO` 與幾何參數裡。
-改完重烤即可（需要 Pillow + numpy 的開發機，可在 Pi 或你的電腦上跑）：
+---
+
+## 4. 改造外觀
+
+所有發光效果、顏色、嘴型形狀都定義在 `tools/render_layers.py` 的 `EMO` 與幾何參數裡。
+改完後重新烘焙（需 Pillow + numpy，可在 Pi 或開發機上執行）：
 
 ```bash
 python3 tools/render_layers.py     # 重新產生 assets/sprites/
 python3 tools/render_apng.py       # 重新產生 assets/apng/
 ```
-缺點就是改造型要重烤一次（不像程序化繪製即時改參數），但這是一行指令的事。
 
-## 8. 效能
+---
+
+## 5. 待辦清單（Roadmap）
+
+- [ ] **接真實 pipeline** — 替換 `integration/example_pipeline.py` 裡的 4 個 `# >>> REPLACE`（`wait_for_wake` / `record_and_transcribe` / `think` / `synthesize`），接上 STT / LLM / TTS；在 `face_client.EMOTION_MAP` 對應你的情緒分類標籤；TTS 輸出（或轉換為）16-bit PCM wav。
+- [ ] **Pi 部署收尾** — 確認音訊 sink、設定開機自啟＋桌面自動登入、隱藏滑鼠游標、關閉螢幕休眠、確認顯示後端（Wayland / X11）。
+- [ ] **新增情緒**（害羞 shy / 驚訝 surprised，尚未決定）— 在 `tools/render_layers.py` 的 `EMO` 與 `MOUTHS_M` 加入新情緒（眉毛姿態、符號、顏色），重新 bake；再於 `face_player.py` 的 `TALKERS` 與 `PROFILE` 補上對應設定。
+- [ ] **背景音樂** — 每種情緒配專屬器樂迴圈（用 Suno 付費版生成以取得商業授權）；設計為無縫迴圈、在 TTS 說話時自動 duck；整合點為 `face_player.py` 的狀態切換或外部 brain。`angry` BGM 方向：緩慢/厚重/帶壓迫感，鼓組不主導。
+
+---
+
+## 6. 參考資訊
+
+### 6-1. 效能
 
 純粹是預烤圖層的 blit，Pi 4 在 800×480 跑 60fps 非常輕鬆，
 不像 Chromium 要每格重算 CSS 濾鏡。表面以 `convert_alpha()` 載入以加速。
 
-## 微動作個性對照（程式內 `PROFILE`）
+### 6-2. 微動作個性對照（程式內 `PROFILE`）
 
 | 情緒 | 視線 | 挑眉/壓眉 | 眨眼 | 浮動 |
 |---|---|---|---|---|
