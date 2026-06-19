@@ -11,6 +11,10 @@
 |:----:|:----:|:----:|:----:|:------:|
 | ![happy](assets/apng/happy.png) | ![sad](assets/apng/sad.png) | ![dejected](assets/apng/dejected.png) | ![angry](assets/apng/angry.png) | ![speaking](assets/apng/speaking.png) |
 
+| 開機 | 待機 | 聆聽 | 思考 | 休眠 | 異常 |
+|:----:|:----:|:----:|:----:|:----:|:----:|
+| ![boot](assets/apng/boot.png) | ![idle](assets/apng/idle.png) | ![listening](assets/apng/listening.png) | ![thinking](assets/apng/thinking.png) | ![sleep](assets/apng/sleep.png) | ![error](assets/apng/error.png) |
+
 ---
 
 ## 1. 專案架構
