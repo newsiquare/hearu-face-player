@@ -5,6 +5,12 @@
 6 種非說話狀態（開機／待機／聆聽／思考／休眠／異常）則播放預先做好的 APNG 迴圈。  
 臉部透過 **TCP 指令介面**接受外部 STT/LLM/TTS pipeline 驅動。
 
+### 表情預覽
+
+| 開心 | 難過 | 沮喪 | 生氣 | 說話中 |
+|:----:|:----:|:----:|:----:|:------:|
+| ![happy](assets/apng/happy.png) | ![sad](assets/apng/sad.png) | ![dejected](assets/apng/dejected.png) | ![angry](assets/apng/angry.png) | ![speaking](assets/apng/speaking.png) |
+
 ---
 
 ## 1. 專案架構
