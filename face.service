@@ -1,0 +1,20 @@
+# systemd USER service. Install:
+#   loginctl enable-linger <USER>
+#   mkdir -p ~/.config/systemd/user
+#   cp face.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now face.service
+# Requires a running graphical (Wayland/X11) session on the attached display.
+[Unit]
+Description=Companion Robot Face Player
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+WorkingDirectory=%h/companion-face
+ExecStart=%h/companion-face/run_face.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
