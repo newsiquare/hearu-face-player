@@ -34,6 +34,18 @@ MOUTH_STEPS = 8
 LED = {"boot":"BOOT","idle":"IDLE","listening":"LISTEN","thinking":"THINK","speaking":"SPEAK",
        "happy":"HAPPY","sad":"SAD","dejected":"DOWN","angry":"ANGRY","sleep":"SLEEP","error":"ERROR"}
 
+# BGM mapping: state name → ogg filename (None = silence)
+BGM_MAP = {
+    "happy":    "happy",    "sad":       "sad",   "dejected": "dejected",
+    "angry":    "angry",    "speaking":  "speaking",
+    "idle":     "idle",     "listening": "listening", "thinking": "thinking",
+    "boot":     None,       "sleep":     None,    "error":    None,
+}
+BGM_FULL       = 0.75   # 正常音量
+BGM_DUCK       = 0.15   # TTS 說話時壓低到此
+BGM_FADE_SPEED = 1.5    # 每秒音量變化量（淡入淡出速度）
+BGM_CH         = 1      # 專用 mixer channel
+
 # micro-motion profile per talking state: gaze interval(ms), gaze amplitude(px),
 # brow-flash probability, brow direction (+up / -down for angry), blink interval(ms)
 PROFILE = {
@@ -85,6 +97,10 @@ class Face:
         pygame.display.set_caption("Companion Face")
         self.font = pygame.font.SysFont("monospace", 13)
         self._load()
+        # BGM runtime state
+        self.bgm_current = None   # 目前播放的 BGM key
+        self.bgm_vol     = 0.0    # 目前實際音量
+        self.bgm_target  = 0.0    # 目標音量
         # runtime state
         self.state = "idle"; self.talking = False
         self.lip = 0.0; self.lip_target = 0.0
@@ -109,8 +125,31 @@ class Face:
         for s in LOOPS:
             p = os.path.join(APN, s + ".png")
             if os.path.exists(p): self.loops[s] = load_apng(p)
+        # BGM: 預載所有 ogg 為 Sound 物件
+        self.bgm_sounds = {}
+        bgm_dir = os.path.join(HERE, "assets", "bgm")
+        for key in set(v for v in BGM_MAP.values() if v):
+            p = os.path.join(bgm_dir, key + ".ogg")
+            if os.path.exists(p):
+                self.bgm_sounds[key] = pygame.mixer.Sound(p)
+        self.bgm_ch = pygame.mixer.Channel(BGM_CH)
 
     # ---- public API ----
+    def _bgm_switch(self, state_name):
+        """切換 BGM 到對應狀態，若相同則不重播。"""
+        key = BGM_MAP.get(state_name)
+        if key == self.bgm_current:
+            return
+        self.bgm_current = key
+        self.bgm_ch.stop()
+        if key and key in self.bgm_sounds:
+            self.bgm_ch.play(self.bgm_sounds[key], loops=-1)
+            self.bgm_vol    = 0.0
+            self.bgm_target = BGM_FULL
+        else:
+            self.bgm_vol    = 0.0
+            self.bgm_target = 0.0
+
     def set_state(self, name):
         if name not in TALKERS and name not in self.loops: return
         self.state = name
@@ -120,6 +159,8 @@ class Face:
             self.floatA = PROFILE[name]["floatA"]
             if not self.talking:                      # static emotion mouth
                 self.lip_target = 0.45 if name == "happy" else 0.0
+        if not self.talking:      # TTS 進行中不切 BGM（speak() 結束後再切）
+            self._bgm_switch(name)
 
     def speak(self, wav_path, emotion="speaking"):
         if emotion not in TALKERS: emotion = "speaking"
@@ -128,6 +169,8 @@ class Face:
             self.env, self.env_hop, self.audio_dur = wav_envelope(wav_path)
             pygame.mixer.music.load(wav_path); pygame.mixer.music.play()
             self.audio_t0 = time.perf_counter(); self.talking = True
+            # TTS 開始：BGM duck
+            self.bgm_target = BGM_DUCK
         except Exception as e:
             print("speak failed:", e); self.talking = False
 
@@ -146,6 +189,8 @@ class Face:
                 if not pygame.mixer.music.get_busy() and (time.perf_counter()-self.audio_t0) > 0.15:
                     self.talking = False; self.lip_target = 0.0
                     self._end_at = now + 0.4
+                    # TTS 結束：BGM unduck
+                    self.bgm_target = BGM_FULL
                 elif self.env is not None:
                     idx = int((time.perf_counter()-self.audio_t0) / self.env_hop)
                     self.lip_target = float(self.env[idx]) if 0 <= idx < len(self.env) else 0.0
@@ -184,6 +229,12 @@ class Face:
                 frames, durs = L; self.loop_acc += dt*1000
                 while self.loop_acc >= durs[self.loop_i]:
                     self.loop_acc -= durs[self.loop_i]; self.loop_i = (self.loop_i+1) % len(frames)
+        # BGM 音量漸變（每幀平滑 fade in/out/duck）
+        if self.bgm_vol != self.bgm_target:
+            step = BGM_FADE_SPEED * dt
+            diff = self.bgm_target - self.bgm_vol
+            self.bgm_vol = self.bgm_target if abs(diff) <= step else self.bgm_vol + math.copysign(step, diff)
+            self.bgm_ch.set_volume(self.bgm_vol)
 
     def draw(self, now):
         st = self.state
@@ -285,8 +336,14 @@ def main():
                 if e.key in (pygame.K_ESCAPE, pygame.K_q): running = False
                 elif e.key in keymap:
                     tgt = keymap[e.key]
-                    if tgt in TALKERS: face.speak(make_demo_wav(tgt), tgt)
-                    else: face.set_state(tgt)
+                    mods = pygame.key.get_mods()
+                    if tgt in TALKERS:
+                        if mods & pygame.KMOD_SHIFT:
+                            face.speak(make_demo_wav(tgt), tgt)  # Shift+1~5：播示範語音
+                        else:
+                            face.set_state(tgt)                  # 1~5：只切情緒/BGM
+                    else:
+                        face.set_state(tgt)
         # commands from pipeline
         while not cmdq.empty():
             c = cmdq.get()
