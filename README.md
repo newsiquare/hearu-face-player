@@ -63,7 +63,7 @@ cd hearu-face-player
 #### 2-1-2. 啟動臉部（終端機 1）
 
 ```bash
-FACE_WINDOWED=1 FACE_DEBUG=1 python3 face_player.py
+FACE_WINDOWED=1 FACE_DEBUG=1 python face_player.py
 ```
 
 視窗開啟後，左上角會顯示目前狀態標籤。  
@@ -158,7 +158,7 @@ aplay /usr/share/sounds/alsa/Front_Center.wav
 
 ```bash
 cd ~/hearu-face-player
-FACE_WINDOWED=1 FACE_DEBUG=1 python3 face_player.py
+FACE_WINDOWED=1 FACE_DEBUG=1 python face_player.py
 ```
 
 確認表情、音訊、鍵盤快捷鍵都正常後，再進行下一步。
@@ -244,8 +244,8 @@ face({"cmd": "stop"})                                    # 中斷
 改完後重新烘焙（需 Pillow + numpy，可在 Pi 或開發機上執行）：
 
 ```bash
-python3 tools/render_layers.py     # 重新產生 assets/sprites/
-python3 tools/render_apng.py       # 重新產生 assets/apng/
+python tools/render_layers.py     # 重新產生 assets/sprites/
+python tools/render_apng.py       # 重新產生 assets/apng/
 ```
 
 ---
@@ -255,7 +255,7 @@ python3 tools/render_apng.py       # 重新產生 assets/apng/
 - [ ] **接真實 pipeline** — 替換 `integration/example_pipeline.py` 裡的 4 個 `# >>> REPLACE`（`wait_for_wake` / `record_and_transcribe` / `think` / `synthesize`），接上 STT / LLM / TTS；在 `face_client.EMOTION_MAP` 對應你的情緒分類標籤；TTS 輸出（或轉換為）16-bit PCM wav。
 - [ ] **Pi 部署收尾** — 確認音訊 sink、設定開機自啟＋桌面自動登入、隱藏滑鼠游標、關閉螢幕休眠、確認顯示後端（Wayland / X11）。
 - [ ] **新增情緒**（害羞 shy / 驚訝 surprised，尚未決定）— 在 `tools/render_layers.py` 的 `EMO` 與 `MOUTHS_M` 加入新情緒（眉毛姿態、符號、顏色），重新 bake；再於 `face_player.py` 的 `TALKERS` 與 `PROFILE` 補上對應設定。
-- [ ] **背景音樂** — 每種情緒配專屬器樂迴圈（用 Suno 付費版生成以取得商業授權）；設計為無縫迴圈、在 TTS 說話時自動 duck；整合點為 `face_player.py` 的狀態切換或外部 brain。`angry` BGM 方向：緩慢/厚重/帶壓迫感，鼓組不主導。
+- [x] **背景音樂** — 每種情緒配專屬器樂迴圈（用 Suno 付費版生成）；無縫迴圈、TTS 說話時自動 duck／結束後 unduck；已整合至 `face_player.py`（`BGM_MAP`、`_bgm_switch()`、Channel 音量漸變）。音樂素材存放於 `assets/bgm/`，來源 mp3 存放於 `assets/bgm_src/`，轉換腳本為 `tools/convert_bgm.sh`。
 
 ---
 
