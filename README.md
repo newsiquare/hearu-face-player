@@ -2,12 +2,12 @@
 
 情緒陪伴機器人的**臉部顯示系統**，主要特色：
 
-- 🖥️ **部署平台** — Raspberry Pi 4，搭載 800×480 螢幕
-- 🎭 **5 種說話情緒** — happy / sad / dejected / angry / speaking，採預烤分層 sprite + pygame 即時合成
-- 👄 **即時 lip-sync** — 嘴型跟隨 TTS 實際音量包絡開合，同步率極高
-- 🔄 **6 種非說話狀態** — boot / idle / listening / thinking / sleep / error，播放預製 APNG 迴圈
-- 🎵 **情緒配樂** — 每種情緒配專屬 BGM；說話時自動 duck，結束後 unduck
-- 🔌 **TCP 指令介面** — 單行 JSON 即可驅動，輕鬆接入外部 STT / LLM / TTS pipeline
+- **部署平台** — Raspberry Pi 4，搭載 800×480 螢幕
+- **5 種說話情緒** — happy / sad / dejected / angry / speaking，採預烤分層 sprite + pygame 即時合成
+- **即時 lip-sync** — 嘴型跟隨 TTS 實際音量包絡開合，同步率極高
+- **6 種非說話狀態** — boot / idle / listening / thinking / sleep / error，播放預製 APNG 迴圈
+- **情緒配樂** — 每種情緒配專屬 BGM；說話時自動 duck，結束後 unduck
+- **TCP 指令介面** — 單行 JSON 即可驅動，輕鬆接入外部 STT / LLM / TTS pipeline
 
 ### 表情預覽
 
