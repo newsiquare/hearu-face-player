@@ -1,18 +1,18 @@
 # 情緒陪伴機器人 — 臉部播放器
 
 本專案是情緒陪伴機器人的**臉部顯示系統**，部署於搭載 800×480 螢幕的 Raspberry Pi 4。  
-採用預烤分層 sprite 搭配 pygame 即時合成，讓 5 種說話情緒（開心／難過／沮喪／生氣／說話中）的嘴型能跟隨 **TTS 實際音量即時對嘴**（lip-sync），並附有眨眼、視線游移、挑眉／壓眉等微動作。  
+採用預烤分層 sprite 搭配 pygame 即時合成，讓 5 種說話情緒（開心／難過／沮喪／生氣／說話中）的嘴型能跟隨 **TTS 實際音量即時對嘴**（lip-sync），同步率極高。  
 6 種非說話狀態（開機／待機／聆聽／思考／休眠／異常）則播放預先做好的 APNG 迴圈。  
 臉部透過 **TCP 指令介面**接受外部 STT/LLM/TTS pipeline 驅動。
 
 ### 表情預覽
 
-| 開心 | 難過 | 沮喪 | 生氣 | 說話中 |
-|:----:|:----:|:----:|:----:|:------:|
+| happy | sad | dejected | angry | speaking |
+|:-----:|:---:|:--------:|:-----:|:--------:|
 | ![happy](assets/apng/happy.png) | ![sad](assets/apng/sad.png) | ![dejected](assets/apng/dejected.png) | ![angry](assets/apng/angry.png) | ![speaking](assets/apng/speaking.png) |
 
-| 開機 | 待機 | 聆聽 | 思考 | 休眠 | 異常 |
-|:----:|:----:|:----:|:----:|:----:|:----:|
+| boot | idle | listening | thinking | sleep | error |
+|:----:|:----:|:---------:|:--------:|:-----:|:-----:|
 | ![boot](assets/apng/boot.png) | ![idle](assets/apng/idle.png) | ![listening](assets/apng/listening.png) | ![thinking](assets/apng/thinking.png) | ![sleep](assets/apng/sleep.png) | ![error](assets/apng/error.png) |
 
 ---
@@ -262,10 +262,10 @@ python tools/render_apng.py       # 重新產生 assets/apng/
 
 ## 5. 待辦清單（Roadmap）
 
-- [ ] **接真實 pipeline** — 替換 `integration/example_pipeline.py` 裡的 4 個 `# >>> REPLACE`（`wait_for_wake` / `record_and_transcribe` / `think` / `synthesize`），接上 STT / LLM / TTS；在 `face_client.EMOTION_MAP` 對應你的情緒分類標籤；TTS 輸出（或轉換為）16-bit PCM wav。
+- [ ] **接真實 pipeline** — 替換 `integration/example_pipeline.py` 裡的 4 個 `# >>> REPLACE`（`wait_for_wake` / `record_and_transcribe` / `think` / `synthesize`），接上 STT / LLM / TTS 實作。
 - [ ] **Pi 部署收尾** — 確認音訊 sink、設定開機自啟＋桌面自動登入、隱藏滑鼠游標、關閉螢幕休眠、確認顯示後端（Wayland / X11）。
-- [ ] **新增情緒**（害羞 shy / 驚訝 surprised，尚未決定）— 在 `tools/render_layers.py` 的 `EMO` 與 `MOUTHS_M` 加入新情緒（眉毛姿態、符號、顏色），重新 bake；再於 `face_player.py` 的 `TALKERS` 與 `PROFILE` 補上對應設定。
-- [x] **背景音樂** — 每種情緒配專屬器樂迴圈（用 Suno 付費版生成）；無縫迴圈、TTS 說話時自動 duck／結束後 unduck；已整合至 `face_player.py`（`BGM_MAP`、`_bgm_switch()`、Channel 音量漸變）。音樂素材存放於 `assets/bgm/`，來源 mp3 存放於 `assets/bgm_src/`，轉換腳本為 `tools/convert_bgm.sh`。
+- [ ] **新增情緒**（害羞 shy / 驚訝 surprised，尚未決定）— 在 `tools/render_layers.py` 的 `EMO` 與 `MOUTHS_M` 加入新情緒（眉毛姿態、符號、顏色），重新 bake。
+- [x] **背景音樂** — 每種情緒配專屬器樂迴圈（用 Suno 付費版生成）；無縫迴圈、TTS 說話時自動 duck／結束後 unduck；已整合至 `face_player.py`（`BGM_MAP`）。
 
 ---
 
