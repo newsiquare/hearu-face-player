@@ -63,6 +63,7 @@ hearu-face-player/
 
 ```bash
 # 建立 conda 環境（或用任何 Python 3.11 虛擬環境）
+source ~/miniforge3/bin/activate
 conda create -n py311_uihearu python=3.11 -y
 conda activate py311_uihearu
 
